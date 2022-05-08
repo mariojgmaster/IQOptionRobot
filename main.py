@@ -1,5 +1,5 @@
 from iqoptionapi.stable_api import IQ_Option
-import credentials as env
+import src.credentials as env
 import time
 
 user = env.auth.get('USERNAME')
