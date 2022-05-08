@@ -1,0 +1,2 @@
+# IQOptionRobot
+Robô Trader
