@@ -8,62 +8,102 @@ pss = env.auth.get('PASSWORD')
 print("Conectando...")
 
 api = IQ_Option(user,pss)
-status, reason = api.connect()
+
 MODE = 'PRACTICE' # MODE: "PRACTICE"/"REAL"
 GOAL = "EURUSD"
 INSTRUMENT="turbo-option" ## Option "forex", "turbo-option"
+ACTION = 'CALL'
 
-print('##### Primeira tentativa #####')
-# print('Status:', status)
-# print('Reason:', reason)
-# print("Email:", api.email)
+def resetConn():
+    status, reason = api.connect()
 
-api.change_balance(MODE)
+    # print('##### Primeira tentativa #####')
+    # print('Status:', status)
+    # print('Reason:', reason)
+    # print("Email:", api.email)
 
-if reason == "2FA":
-    print('##### 2FA HABILITADO #####')
-    print("Um sms foi enviado com um código para seu número")
+    api.change_balance(MODE)
 
-    code_sms = input("Digite o código recebido: ")
-    status, reason = api.connect_2fa(code_sms)
+    if reason == "2FA":
+        print('##### 2FA HABILITADO #####')
+        print("Um sms foi enviado com um código para seu número")
 
-    print('##### Segunda tentativa #####')
-    print('Status:', status)
-    print('Reason:', reason)
-    print("Email:", api.email)
+        code_sms = input("Digite o código recebido: ")
+        status, reason = api.connect_2fa(code_sms)
 
-print("Banca:", api.get_balance())
-candles = api.get_candles(GOAL, 60, 30, time.time())
+        print('##### Segunda tentativa #####')
+        print('Status:', status)
+        print('Reason:', reason)
+        print("Email:", api.email)
 
-subiram = 0
-empataram = 0
-desceram = 0
+    print("Banca:", api.get_balance())
 
-for candle in candles:
-    id = candle.get('id')
-    open = candle.get('open')
-    close = candle.get('close')
+    # status, reason = api.connect()
+    # print('Status:', status)
+    # print('Reason:', reason)
 
-    # print(f'id: {id}')
-    # print(f'open: {open}')
-    # print(f'close: {close}')
+isOperated = False
+count = 0
 
-    if open > close:
-        # print('Subiu')
-        subiram+=1
-    elif open < close:
-        # print('Desceu')
-        desceram+=1
-    else:
-        # print('Igual')
-        empataram+=1
+def makeOperation():
+    # resetConn()
+    candles = api.get_candles(GOAL, 300, 20, time.time())
 
-# print(f'Subiram: {subiram}')
-# print(f'Empataram: {empataram}')
-# print(f'Desceram: {desceram}')
+    subiram = 0
+    empataram = 0
+    desceram = 0
 
-# api.start_mood_stream(GOAL, INSTRUMENT)
-# print(api.get_traders_mood(GOAL))
-# api.stop_mood_stream(GOAL)
+    for candle in candles:
+        id = candle.get('id')
+        open = candle.get('open')
+        close = candle.get('close')
+
+        # print(f'id: {id}')
+        # print(f'open: {open}')
+        # print(f'close: {close}')
+
+        if open > close:
+            # print('Subiu')
+            subiram+=1
+        elif open < close:
+            # print('Desceu')
+            desceram+=1
+        else:
+            # print('Igual')
+            empataram+=1
+
+    print(f'Subiram: {subiram}')
+    print(f'Empataram: {empataram}')
+    print(f'Desceram: {desceram}')
+
+
+# def makeOperation():
+    isOperated2 = False
+
+    api.start_mood_stream(GOAL, INSTRUMENT)
+    mood = api.get_traders_mood(GOAL)
+    print(f'Mood: {mood}')
+
+    if mood > 0.65 and subiram > desceram:
+    # if subiram > desceram:
+        isOperated2 = True
+        status, order_id = api.buy_digital_spot_v2(GOAL, 5, 'CALL', 5)
+        print(status, order_id)
+    elif mood < 0.4 and subiram < desceram:
+    # elif subiram < desceram:
+        isOperated2 = True
+        status, order_id = api.buy_digital_spot_v2(GOAL, 5, 'PUT', 5)
+        print(status, order_id)
+    api.stop_mood_stream(GOAL)
+    return isOperated2
+
+
+while isOperated == False and count < 50:
+    # isOperated = makeOperation()
+    resetConn()
+    makeOperation()
+    count+=1
+    # time.sleep(2)
+    time.sleep(20)
 
 print("##############################")
