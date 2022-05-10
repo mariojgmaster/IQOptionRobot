@@ -1,109 +1,224 @@
-from iqoptionapi.stable_api import IQ_Option
-import src.credentials as env
+from datetime import datetime
 import time
+from iqoptionapi.stable_api import IQ_Option
+import logging
 
-user = env.auth.get('USERNAME')
-pss = env.auth.get('PASSWORD')
+from src.strategy.mhi import mhi
+import pandas as pd
+import src.credentials as userData
 
-print("Conectando...")
+asset = 'EURUSD'
+maxDict = 10
+size = 300
 
-api = IQ_Option(user,pss)
+logging.disable(level=(logging.DEBUG))
 
-MODE = 'PRACTICE' # MODE: "PRACTICE"/"REAL"
-GOAL = "EURUSD"
-INSTRUMENT="turbo-option" ## Option "forex", "turbo-option"
-ACTION = 'CALL'
+user = userData.auth
+Iq = IQ_Option(user['USERNAME'], user['PASSWORD'])
+check, reason = Iq.connect()
+# print(check)
+# print(reason)
 
-def resetConn():
-    status, reason = api.connect()
+MODE = 'REAL' # PRACTICE / REAL
+Iq.change_balance(MODE)
+INITIAL_BALANCE = Iq.get_balance()
 
-    # print('##### Primeira tentativa #####')
-    # print('Status:', status)
-    # print('Reason:', reason)
-    # print("Email:", api.email)
+# duration = 1
+# Iq.buy_digital_spot_v2(asset, 1, 'put', duration)
 
-    api.change_balance(MODE)
+# profile = Iq.get_profile_ansyc()
+# print(profile)
 
-    if reason == "2FA":
-        print('##### 2FA HABILITADO #####')
-        print("Um sms foi enviado com um código para seu número")
+timeframe = 60
+expiration_mode = 5
 
-        code_sms = input("Digite o código recebido: ")
-        status, reason = api.connect_2fa(code_sms)
+def get_data(candles_amount):
+	global timeframe, asset
+	df = pd.DataFrame()
+	candles = []
+	candles = Iq.get_candles(asset, timeframe, candles_amount, time.time())
+	df = pd.concat([pd.DataFrame(candles), df], ignore_index=True)
+	return df
 
-        print('##### Segunda tentativa #####')
-        print('Status:', status)
-        print('Reason:', reason)
-        print("Email:", api.email)
+def check_order(order_check, order_id):
+	if order_check:
+		result = Iq.check_binary_order(order_id)
+		if result['result']:
+			res = round(float(result['profit_amount']) - float(result['amount']), 2)
+			print('Resultado: ', res)
+	return res
 
-    print("Banca:", api.get_balance())
+def is_time():
+	minutos = float(((datetime.now()).strftime('%M.%S'))[1:])
+	enter = False
+	if minutos == 4.55 or minutos == 9.55:
+		enter = True
+	return enter
 
-    # status, reason = api.connect()
-    # print('Status:', status)
-    # print('Reason:', reason)
+def is_minute_passed():
+	minutos = float(((datetime.now()).strftime('%%.%S'))[1:])
+	# print(minutos)
+	enter = False
+	if minutos == 0.55:
+		enter = True
+	return enter
 
-isOperated = False
-count = 0
+# try:
+# 	while True:
+# 		indicators = Iq.get_technical_indicators(asset)
+# 		# print(indicators)
+# 		m1 = {}
+# 		m5 = {}
+# 		m15 = {}
+# 		geral = {}
+# 		for indicator in indicators:
+# 			v = indicator['action']
+# 			group = indicator['group']
+# 			candle_size = indicator['candle_size']
+# 			if group == 'MOVING AVERAGES':
+# 				if candle_size == 60:
+# 					if v not in m1:
+# 						m1[v] = 0
+# 					m1[v] += 1
 
-def makeOperation():
-    # resetConn()
-    candles = api.get_candles(GOAL, 300, 20, time.time())
+# 				if candle_size == 300:
+# 					if v not in m5:
+# 						m5[v] = 0
+# 					m5[v] += 1
 
-    subiram = 0
-    empataram = 0
-    desceram = 0
+# 				if candle_size == 900:
+# 					if v not in m15:
+# 						m15[v] = 0
+# 					m15[v] += 1
+				
+# 			if v not in geral:
+# 				geral[v] = 0
+# 			geral[v] += 1
+		
+# 		print('M1: ', m1)
+# 		print('M5: ', m5)
+# 		print('M15: ', m15)
+# 		print('GERAL: ', geral)
 
-    for candle in candles:
-        id = candle.get('id')
-        open = candle.get('open')
-        close = candle.get('close')
+# 		if 'buy' in m1 and 'buy' in m5 and 'buy' in m15:
+# 			if m1['buy'] >= 16 and m5['buy'] >= 16 and m15['buy'] >= 16:
+# 				print('CALL')
 
-        # print(f'id: {id}')
-        # print(f'open: {open}')
-        # print(f'close: {close}')
+# 		time.sleep(3)
+# except KeyboardInterrupt:
+# 	print('Parando aplicação...')
 
-        if open > close:
-            # print('Subiu')
-            subiram+=1
-        elif open < close:
-            # print('Desceu')
-            desceram+=1
-        else:
-            # print('Igual')
-            empataram+=1
+def buyPerIndicator(CURRENT_BALANCE):
+	indicators = Iq.get_technical_indicators(asset)
+	# print(indicators)
+	m1 = {}
+	m5 = {}
+	m15 = {}
+	geral = {}
+	for indicator in indicators:
+		v = indicator['action']
+		group = indicator['group']
+		candle_size = indicator['candle_size']
+		if group == 'MOVING AVERAGES':
+			if candle_size == 60:
+				if v not in m1:
+					m1[v] = 0
+				m1[v] += 1
 
-    print(f'Subiram: {subiram}')
-    print(f'Empataram: {empataram}')
-    print(f'Desceram: {desceram}')
+			if candle_size == 300:
+				if v not in m5:
+					m5[v] = 0
+				m5[v] += 1
 
+			if candle_size == 900:
+				if v not in m15:
+					m15[v] = 0
+				m15[v] += 1
+			
+		if v not in geral:
+			geral[v] = 0
+		geral[v] += 1
+	
+	total_call = 0
+	total_put = 0
+	total_hold = 0
+	if 'buy' in m5 and 'sell' in m5 and 'hold' in m5:
+		if m5['buy'] > m5['sell'] and m5['buy'] > m5['hold'] and m5['buy'] >= 10:
+			total_call += 1
+		elif m5['sell'] > m5['buy'] and m5['sell'] > m5['hold'] and m5['sell'] >= 10:
+			total_put += 1
+		elif m5['hold'] > m5['buy'] and m5['hold'] > m5['sell'] and m5['hold'] >= 300:
+			total_hold += 1
+		else:
+			print('Minute - NONE')
+	elif 'buy' not in m5 and 'sell' in m5 and 'hold' in m5:
+		if m5['sell'] > m5['hold'] and m5['sell'] >= 10:
+			total_put += 1
+		elif m5['hold'] > m5['sell'] and m5['hold'] >= 300:
+			total_hold += 1
+		else:
+			print('Minute - NONE')
+	elif 'buy' in m5 and 'sell' not in m5 and 'hold' in m5:
+		if m5['buy'] > m5['hold'] and m5['buy'] >= 10:
+			total_call += 1
+		elif m5['hold'] > m5['buy'] and m5['hold'] >= 300:
+			total_hold += 1
+		else:
+			print('Minute - NONE')
+	elif 'buy' in m5 and 'sell' in m5 and 'hold' not in m5:
+		if m5['buy'] > m5['sell'] and m5['buy'] >= 10:
+			total_call += 1
+		elif m5['sell'] > m5['buy'] and m5['sell'] >= 300:
+			total_put += 1
+		else:
+			print('Minute - NONE')
+	
+	if total_call == 0 and total_put == 0 and total_hold == 0:
+		print('ALL IQUALS ZERO')
+	else:
+		if total_call > total_put and total_call > total_hold:
+			Iq.buy_digital_spot_v2(asset, (CURRENT_BALANCE * 0.05), 'call', expiration_mode)
+		elif total_put > total_call and total_put > total_hold:
+			Iq.buy_digital_spot_v2(asset, (CURRENT_BALANCE * 0.05), 'put', expiration_mode)
+		else:
+			print('Espera')
 
-# def makeOperation():
-    isOperated2 = False
+	print('----------------------------')
+	print(f'CALL: {total_call} - PUT: {total_put} - HOLD: {total_hold}')
+	print('----------------------------')
+	print('M1: ', m1)
+	print('M5: ', m5)
+	print('M15: ', m15)
+	print('GERAL: ', geral)
 
-    api.start_mood_stream(GOAL, INSTRUMENT)
-    mood = api.get_traders_mood(GOAL)
-    print(f'Mood: {mood}')
+try:
+	while True:
+		CURRENT_BALANCE = Iq.get_balance()
 
-    if mood > 0.65 and subiram > desceram:
-    # if subiram > desceram:
-        isOperated2 = True
-        status, order_id = api.buy_digital_spot_v2(GOAL, 5, 'CALL', 5)
-        print(status, order_id)
-    elif mood < 0.4 and subiram < desceram:
-    # elif subiram < desceram:
-        isOperated2 = True
-        status, order_id = api.buy_digital_spot_v2(GOAL, 5, 'PUT', 5)
-        print(status, order_id)
-    api.stop_mood_stream(GOAL)
-    return isOperated2
+		if is_minute_passed():
+			buyPerIndicator(CURRENT_BALANCE)
 
+		if CURRENT_BALANCE > (INITIAL_BALANCE - (INITIAL_BALANCE * 0.2)):
+			# print(Iq.get_balance())
+			if is_time():
+				print('\nAnalisando...')
+				data = get_data(120)
+				opened = data['open']
+				closed = data['close']
 
-while isOperated == False and count < 50:
-    # isOperated = makeOperation()
-    resetConn()
-    makeOperation()
-    count+=1
-    # time.sleep(2)
-    time.sleep(20)
+				signal = mhi(opened, closed)
+				print('MHI: ', signal)
 
-print("##############################")
+				if signal is not None:
+					print('Comprou')
+					order_check, order_id = Iq.buy_digital_spot_v2(asset, (CURRENT_BALANCE * 0.05), signal, expiration_mode)
+					# res = check_order(order_check, order_id)
+					# print(f'Res: {res}')
+			else:
+				print('...')
+		else:
+			print('STOP LOSS')
+			break
+		time.sleep(1)
+except KeyboardInterrupt:
+	print('Parando aplicação...')
